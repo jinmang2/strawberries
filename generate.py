@@ -1,156 +1,44 @@
+import argparse
+import logging
+import time
 from typing import Dict, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm.auto import tqdm
 
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-# Safe exponential function
+
+def log_execution_time(func):
+    """함수 실행 시간을 측정하고 로그를 남기는 데코레이터"""
+
+    def wrapper(*args, **kwargs):
+        logging.debug(f"Executing {func.__name__}...")
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        logging.debug(
+            f"{func.__name__} executed in {end_time - start_time:.4f} seconds"
+        )
+        return result
+
+    return wrapper
+
+
 def safe_exp(x) -> np.ndarray:
-    # return np.exp(np.minimum(x, 700))
-    # return np.exp(x)
+    """Safe exponential function with clipping to prevent overflow."""
     return np.exp(np.clip(x, -1000, 700))
 
 
-# Function F (Vectorized)
-def F(x: np.ndarray) -> np.ndarray:
-    e_val = safe_exp(-safe_exp(-1000 * x))
-    x_val = np.abs(x) ** (safe_exp(-safe_exp(1000 * (x - 1))))
-    return 255 * e_val * x_val
-
-
-def L(v: int, Table: Dict[str, np.ndarray]) -> np.ndarray:
-    S = Table["S"]
-    R0 = Table["R0"]
-    P = Table["P"]
-    C20 = Table["C20"]
-    C10 = Table["C10"]
-    A4 = Table["A4"]
-    A1000 = Table["A1000"]
-    B = Table["B"]
-
-    left_term_1 = 1 / 10 - (1 / 40) * np.cos(20 * np.arccos(R0)) * np.cos(25 * P)
-    left_term_2 = (
-        4 * v**2
-        - 13 * v
-        + 11
-        + np.cos(7 * S + v * S)
-        + 20 * safe_exp(-safe_exp(-70 * (C20 - 1 / 2)))
-        + 20 * safe_exp(-safe_exp(-10 * (C10 - 1 / 2)))
-    )
-
-    return left_term_1 * left_term_2 * A4 * A1000 + B
-
-
-def H(v: int, Table: Dict[str, np.ndarray]) -> np.ndarray:
-
-    def f(r: int) -> np.ndarray:
-        return (
-            (1 - Table["A1000"][r])
-            * (1 - safe_exp(-safe_exp(-1000 * (r - 0.5))) * Table["U"][r])
-            * (1 - 1.25 * Table["A4"][r])
-        )
-
-    def g(v: int, s: int) -> np.ndarray:
-        res = (
-            (5 - 3 * (v - 1) ** 2 + Table["W_xy"])
-            / 10
-            * safe_exp(-safe_exp(-np.abs(71 / 10 - 10 * Table["P"][s])))
-            * Table["U"][s]
-        )
-        res += Table["A1000"][s] * (1 - Table["U"][s]) * L_val[s]
-        return res
-
-    L_val = L(v, Table)
-    f_cumprod = np.ones_like(Table["W_xy"])
-    H_val = np.zeros_like(Table["W_xy"])
-    for s in tqdm(range(1, 31)):
-        f_cumprod *= f(s - 1)
-        H_val += f_cumprod * g(v, s)
-
-    return H_val
-
-
-# Vectorized RGB function
-def compute_RGB(Table: Dict[str, np.ndarray]) -> np.ndarray:
-    R = F(H(0, Table))
-    G = F(H(1, Table))
-    B = F(H(2, Table))
-
-    img = np.stack([R, G, B], axis=-1).astype(np.uint8)
-    return img
-
-
-# Generate image with vectorized operations
-def generate_image(
-    width: int = 2000, height: int = 1200, denominator: int | None = None
-) -> np.ndarray:
-    X, Y = _create_meshgrid(width, height, denominator)
-
-    Table = _prepare_tables(width, height, X, Y)
-
-    print("Generating image using vectorized RGB computation...")
-    image = compute_RGB(Table)
-    return image
-
-
-def _create_meshgrid(
-    width: int, height: int, denominator: int
-) -> Tuple[np.ndarray, np.ndarray]:
-    x_denominator = denominator or width // 2
-    x_vals = (np.arange(width) + 1 - width // 2) / x_denominator
-    y_denominator = denominator or height // 2
-    y_vals = (height // 2 - np.arange(height)) / y_denominator
-    X, Y = np.meshgrid(x_vals, y_vals)
-    return X, Y
-
-
-def _prepare_tables(
-    width: int, height: int, X: np.ndarray, Y: np.ndarray
-) -> Dict[str, np.ndarray]:
-    print("Prepare 'S' Table")
-    S = _prepare_s_range(width, height, n_range=31)
-    print("Prepare 'P' Table")
-    P = _prepare_p_table(X, Y, S)
-    print("Prepare 'Q' Table")
-    Q = _prepare_q_table(X, Y, S)
-    print("Prepare 'W' Table")
-    W = _prepare_w_table(X, Y, width, height, n_range=40)
-    W_xy = W.sum(axis=0)
-    print("Prepare 'A' Table")
-    A4 = _prepare_a_table(4, S, P, Q)
-    A1000 = _prepare_a_table(1000, S, P, Q)
-    print("Prepare 'R' Table")
-    R0 = _prepare_r_table(0, P, Q)
-    R1 = _prepare_r_table(1, P, Q)
-    print("Prepare 'U' Table")
-    U = _prepare_u_table(X, Y, S, P, Q, R0, R1)
-    print("Prepare 'C' Table")
-    C10 = _prepare_c_table(10, R0, P, Q, W_xy)
-    C20 = _prepare_c_table(20, R0, P, Q, W_xy)
-    print("Prepare 'B' Table")
-    B = _prepare_b_table(R0, P)
-
-    return {
-        "S": S,
-        "P": P,
-        "Q": Q,
-        "W_xy": W_xy,
-        "A4": A4,
-        "A1000": A1000,
-        "R0": R0,
-        "R1": R1,
-        "U": U,
-        "C10": C10,
-        "C20": C20,
-        "B": B,
-    }
-
-
+@log_execution_time
 def _prepare_s_range(width: int, height: int, n_range: int) -> np.ndarray:
     return np.tile(np.arange(n_range).reshape(n_range, 1, 1), (1, height, width))
 
 
+@log_execution_time
 def _prepare_p_table(X: np.ndarray, Y: np.ndarray, S: np.ndarray) -> np.ndarray:
     return np.arctan(
         np.tan(
@@ -162,6 +50,7 @@ def _prepare_p_table(X: np.ndarray, Y: np.ndarray, S: np.ndarray) -> np.ndarray:
     )
 
 
+@log_execution_time
 def _prepare_q_table(X: np.ndarray, Y: np.ndarray, S: np.ndarray) -> np.ndarray:
     return np.arctan(
         np.tan(
@@ -171,6 +60,7 @@ def _prepare_q_table(X: np.ndarray, Y: np.ndarray, S: np.ndarray) -> np.ndarray:
     )
 
 
+@log_execution_time
 def _prepare_w_table(
     X: np.ndarray, Y: np.ndarray, width: int, height: int, n_range: int
 ) -> np.ndarray:
@@ -197,6 +87,7 @@ def _prepare_w_table(
     return W_table
 
 
+@log_execution_time
 def _prepare_a_table(v: int, S: np.ndarray, P: np.ndarray, Q: np.ndarray) -> np.ndarray:
     s_const = -safe_exp(-1000 * (S - 1 / 2))
     weighted = -safe_exp(
@@ -212,6 +103,7 @@ def _prepare_a_table(v: int, S: np.ndarray, P: np.ndarray, Q: np.ndarray) -> np.
     return safe_exp(s_const + weighted + penalty)
 
 
+@log_execution_time
 def _prepare_u_table(
     X: np.ndarray,
     Y: np.ndarray,
@@ -256,9 +148,10 @@ def _prepare_u_table(
     return 1 - (1 - M) * (1 - N)
 
 
+@log_execution_time
 def _prepare_r_table(t: int, P: np.ndarray, Q: np.ndarray) -> np.ndarray:
 
-    def E(t, P, Q):
+    def E(t: int, P: np.ndarray, Q: np.ndarray) -> np.ndarray:
         left_term = 1000 / np.sqrt(20) * Q
         center_term = np.sqrt(5 * np.abs(20 - 20 * (1 - 2 * t) * P - 27 * t))
         right_term = (
@@ -271,6 +164,7 @@ def _prepare_r_table(t: int, P: np.ndarray, Q: np.ndarray) -> np.ndarray:
     return E_t_s * safe_exp(-safe_exp(1000 * (np.abs(E_t_s) - 1)))
 
 
+@log_execution_time
 def _prepare_c_table(
     v: int,
     R: np.ndarray,
@@ -292,17 +186,163 @@ def _prepare_c_table(
     return safe_exp(left + right)
 
 
+@log_execution_time
 def _prepare_b_table(R: np.ndarray, P: np.ndarray) -> np.ndarray:
     return safe_exp(
         -safe_exp(-70 * (np.cos(20 * np.arccos(R)) * np.cos(25 * P) - 47 / 50))
     )
 
 
+def F(x: np.ndarray) -> np.ndarray:
+    """Compute the transformation function F.
+    -> RGB 0~255로 mapping
+    """
+    e_val = safe_exp(-safe_exp(-1000 * x))
+    x_val = np.abs(x) ** (safe_exp(-safe_exp(1000 * (x - 1))))
+    return 255 * e_val * x_val
+
+
+def L(v: int, Table: Dict[str, np.ndarray]) -> np.ndarray:
+    """Computes L function using precomputed tables."""
+    left_term_1 = np.cos(20 * np.arccos(Table["R0"])) * np.cos(25 * Table["P"])
+    left_term_1 = 0.1 - (1 / 40) * left_term_1
+
+    left_term_2 = 4 * v**2 - 13 * v + 11
+    left_term_2 += np.cos(7 * Table["S"] + v * Table["S"])
+    left_term_2 += 20 * safe_exp(
+        -safe_exp(-70 * (Table["C20"] - 1 / 2))
+    ) + 20 * safe_exp(-safe_exp(-10 * (Table["C10"] - 1 / 2)))
+
+    return left_term_1 * left_term_2 * Table["A4"] * Table["A1000"] + Table["B"]
+
+
+def H(v: int, Table: Dict[str, np.ndarray]) -> np.ndarray:
+    """Main Function. 딸기를 loop을 돌면서 생성"""
+
+    def f(r: int) -> np.ndarray:
+        return (
+            (1 - Table["A1000"][r])
+            * (1 - safe_exp(-safe_exp(-1000 * (r - 0.5))) * Table["U"][r])
+            * (1 - 1.25 * Table["A4"][r])
+        )
+
+    def g(v: int, s: int) -> np.ndarray:
+        res = (
+            (5 - 3 * (v - 1) ** 2 + Table["W_xy"])
+            / 10
+            * safe_exp(-safe_exp(-np.abs(71 / 10 - 10 * Table["P"][s])))
+            * Table["U"][s]
+        )
+        res += Table["A1000"][s] * (1 - Table["U"][s]) * L_val[s]
+        return res
+
+    L_val = L(v, Table)
+    f_cumprod = np.ones_like(Table["W_xy"])
+    H_val = np.zeros_like(Table["W_xy"])
+    for s in tqdm(range(1, 31)):
+        f_cumprod *= f(s - 1)
+        H_val += f_cumprod * g(v, s)
+
+    return H_val
+
+
+def create_meshgrid(
+    width: int, height: int, denominator: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Creates a meshgrid for X and Y values."""
+    x_vals = (np.arange(width) + 1 - width // 2) / (denominator or width // 2)
+    y_vals = (height // 2 - np.arange(height)) / (denominator or height // 2)
+    return np.meshgrid(x_vals, y_vals)
+
+
+PREPARE_FUNCTIONS = {
+    "S": _prepare_s_range,
+    "P": _prepare_p_table,
+    "Q": _prepare_q_table,
+    "W": _prepare_w_table,
+    "A": _prepare_a_table,
+    "R": _prepare_r_table,
+    "U": _prepare_u_table,
+    "C": _prepare_c_table,
+    "B": _prepare_b_table,
+}
+
+
+def prepare_tables(
+    width: int, height: int, X: np.ndarray, Y: np.ndarray
+) -> Dict[str, np.ndarray]:
+    S = PREPARE_FUNCTIONS["S"](width, height, n_range=31)
+    P = PREPARE_FUNCTIONS["P"](X, Y, S)
+    Q = PREPARE_FUNCTIONS["Q"](X, Y, S)
+    W = PREPARE_FUNCTIONS["W"](X, Y, width, height, n_range=40)
+    W_xy = W.sum(axis=0)
+    R0 = PREPARE_FUNCTIONS["R"](0, P, Q)
+    R1 = PREPARE_FUNCTIONS["R"](1, P, Q)
+
+    return {
+        "S": S,
+        "P": P,
+        "Q": Q,
+        "W_xy": W_xy,
+        "A4": PREPARE_FUNCTIONS["A"](4, S, P, Q),
+        "A1000": PREPARE_FUNCTIONS["A"](1000, S, P, Q),
+        "R0": R0,
+        "R1": R1,
+        "U": PREPARE_FUNCTIONS["U"](X, Y, S, P, Q, R0, R1),
+        "C10": PREPARE_FUNCTIONS["C"](10, R0, P, Q, W_xy),
+        "C20": PREPARE_FUNCTIONS["C"](20, R0, P, Q, W_xy),
+        "B": PREPARE_FUNCTIONS["B"](R0, P),
+    }
+
+
+def compute_RGB(Table: Dict[str, np.ndarray]) -> np.ndarray:
+    """RGB 계산하여 image로 변환"""
+    R = F(H(0, Table))
+    G = F(H(1, Table))
+    B = F(H(2, Table))
+
+    img = np.stack([R, G, B], axis=-1).astype(np.uint8)
+    return img
+
+
+# Generate image with vectorized operations
+def generate_image(
+    width: int = 2000, height: int = 1200, denominator: int | None = None
+) -> np.ndarray:
+    """Generates the full image by computing necessary tables and applying transformations."""
+    X, Y = create_meshgrid(width, height, denominator)
+    Table = prepare_tables(width, height, X, Y)
+
+    logging.info("Generating image using vectorized RGB computation...")
+    image = compute_RGB(Table)
+    return image
+
+
 # Run the optimized function
 if __name__ == "__main__":
-    width, height = 2000, 1200
-    image = generate_image(width=width, height=height, denominator=height // 2)
-    plt.imsave("strawberries_optimized_250317_3.png", image)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--filename", type=str, default="strawberries.png")
+    parser.add_argument("--width", type=int, default=2000)
+    parser.add_argument("--height", type=int, default=1200)
+    parser.add_argument("--use_height", action="store_false")
+    parser.add_argument(
+        "--log_level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    )
+    args = parser.parse_args()
+
+    denominator = None
+    if args.use_height:
+        denominator = args.height // 2
+
+    image = generate_image(
+        width=args.width,
+        height=args.height,
+        denominator=denominator,
+    )
+    plt.imsave(args.filename, image)
     plt.imshow(image)
     plt.axis("off")
     plt.show()
