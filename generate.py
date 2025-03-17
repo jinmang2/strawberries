@@ -7,17 +7,16 @@ from tqdm.auto import tqdm
 
 # Safe exponential function
 def safe_exp(x) -> np.ndarray:
-    return np.exp(np.minimum(x, 700))
+    # return np.exp(np.minimum(x, 700))
     # return np.exp(x)
+    return np.exp(np.clip(x, -1000, 700))
 
 
 # Function F (Vectorized)
 def F(x: np.ndarray) -> np.ndarray:
-    return (
-        255
-        * safe_exp(-safe_exp(-1000 * x))
-        * np.abs(x) ** (safe_exp(-safe_exp(1000 * (x - 1))))
-    )
+    e_val = safe_exp(-safe_exp(-1000 * x))
+    x_val = np.abs(x) ** (safe_exp(-safe_exp(1000 * (x - 1))))
+    return 255 * e_val * x_val
 
 
 def L(v: int, Table: Dict[str, np.ndarray]) -> np.ndarray:
@@ -53,12 +52,14 @@ def H(v: int, Table: Dict[str, np.ndarray]) -> np.ndarray:
         )
 
     def g(v: int, s: int) -> np.ndarray:
-        return (
+        res = (
             (5 - 3 * (v - 1) ** 2 + Table["W_xy"])
             / 10
             * safe_exp(-safe_exp(-np.abs(71 / 10 - 10 * Table["P"][s])))
             * Table["U"][s]
-        ) + Table["A1000"][s] * (1 - Table["U"][s]) * L_val[s]
+        )
+        res += Table["A1000"][s] * (1 - Table["U"][s]) * L_val[s]
+        return res
 
     L_val = L(v, Table)
     f_cumprod = np.ones_like(Table["W_xy"])
@@ -264,7 +265,7 @@ def _prepare_r_table(t: int, P: np.ndarray, Q: np.ndarray) -> np.ndarray:
             1 + 50 * np.sqrt(np.abs(4 * (200 - (20 * (1 - 2 * t) * P + 27 * t) ** 2)))
         ) ** -1
 
-        return left_term + center_term + right_term
+        return left_term * center_term * right_term
 
     E_t_s = E(t, P, Q)
     return E_t_s * safe_exp(-safe_exp(1000 * (np.abs(E_t_s) - 1)))
@@ -280,11 +281,11 @@ def _prepare_c_table(
     cos_term = np.cos(10 * np.arccos(R)) * np.cos(25 / 2 * P)
     sin_term = np.sin(10 * np.arccos(R)) * np.sin(25 / 2 * P)
 
-    left = -(
-        safe_exp(v * (cos_term - 7 / 10 - W_xy / 5))
-        + safe_exp(-v * (cos_term + 7 / 10 + W_xy / 5))
-        + safe_exp(v * (sin_term - 7 / 10 - W_xy / 5))
-        + safe_exp(-v * (sin_term + 7 / 10 + W_xy / 5))
+    left = (
+        -safe_exp(v * (cos_term - 7 / 10 - W_xy / 5))
+        - safe_exp(-v * (cos_term + 7 / 10 + W_xy / 5))
+        - safe_exp(v * (sin_term - 7 / 10 - W_xy / 5))
+        - safe_exp(-v * (sin_term + 7 / 10 + W_xy / 5))
     )
     right = -safe_exp(3 / 2 * ((Q) ** 2 + (P - 1 / 4) ** 2 - 21 / 50 + W_xy / 5))
 
@@ -301,7 +302,7 @@ def _prepare_b_table(R: np.ndarray, P: np.ndarray) -> np.ndarray:
 if __name__ == "__main__":
     width, height = 2000, 1200
     image = generate_image(width=width, height=height, denominator=height // 2)
-    plt.imsave("strawberries_optimized_250317_2.png", image)
+    plt.imsave("strawberries_optimized_250317_3.png", image)
     plt.imshow(image)
     plt.axis("off")
     plt.show()
