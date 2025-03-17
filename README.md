@@ -66,12 +66,15 @@ $$
 $$
 
 $$
+
 C_{v,s}(x,y) =
  e^{-e^{v \left( \cos \left( 10 \arccos(R_{0,s}(x,y)) \right) \cos \left( \frac{25}{2} P_s(x,y) \right) - \frac{7}{10} - \frac{W(x,y)}{5} \right)}
  -e^{v \left( \cos \left( 10 \arccos(R_{0,s}(x,y)) \right) \cos \left( \frac{25}{2} P_s(x,y) \right) + \frac{7}{10} + \frac{W(x,y)}{5} \right)}
  -e^{v \left( \sin \left( 10 \arccos(R_{0,s}(x,y)) \right) \sin \left( \frac{25}{2} P_s(x,y) \right) - \frac{7}{10} - \frac{W(x,y)}{5} \right)}
  -e^{v \left( \sin \left( 10 \arccos(R_{0,s}(x,y)) \right) \sin \left( \frac{25}{2} P_s(x,y) \right) + \frac{7}{10} + \frac{W(x,y)}{5} \right)}}
 \times e^{-e^{-\frac{3}{2} \left( (Q_s(x,y))^2 + \left( P_s(x,y) - \frac{1}{4} \right)^2 - \frac{21}{50} + \frac{W(x,y)}{5} \right)}}.
+
+
 $$
 
 $$
