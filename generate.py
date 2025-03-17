@@ -176,13 +176,21 @@ def _prepare_w_table(
     W_table = np.zeros((n_range, height, width))
 
     for s in range(1, n_range + 1):
-        left = np.cos(
-            28**s * 25**-s * (np.cos(2 * s) * X + np.sin(2 * s) * Y) + 2 * np.sin(5 * s)
+        left = (
+            np.cos(
+                28**s * 25**-s * (np.cos(2 * s) * X + np.sin(2 * s) * Y)
+                + 2 * np.sin(5 * s)
+            )
+            ** 2
         )
-        right = np.cos(
-            28**s * 25**-s * (np.cos(2 * s) * Y - np.sin(2 * s) * X) + 2 * np.sin(6 * s)
+        right = (
+            np.cos(
+                28**s * 25**-s * (np.cos(2 * s) * Y - np.sin(2 * s) * X)
+                + 2 * np.sin(6 * s)
+            )
+            ** 2
         )
-        exp_exponent = -3 * (left**2 * right**2 + (-97 / 100))
+        exp_exponent = -3 * (left * right + (-97 / 100))
         W_table[s - 1] = safe_exp(-safe_exp(exp_exponent))
 
     return W_table
@@ -293,7 +301,7 @@ def _prepare_b_table(R: np.ndarray, P: np.ndarray) -> np.ndarray:
 if __name__ == "__main__":
     width, height = 2000, 1200
     image = generate_image(width=width, height=height, denominator=height // 2)
-    plt.imsave("strawberries_optimized_250317_1.png", image)
+    plt.imsave("strawberries_optimized_250317_2.png", image)
     plt.imshow(image)
     plt.axis("off")
     plt.show()
